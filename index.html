@@ -2277,10 +2277,11 @@ function standTackle(q) {
   if (!o || o.t === q.t || q.tackleCd > 0 || q.downT > 0 || q.slideT > 0) return false;
   const d = Math.hypot(q.x - o.x, q.y - o.y);
   q.tackleCd = .75; q.kickT = .26;
-  if (d > 2) return false;
+  const me = q.t === 0 && q === G.controlled && !G.teams[0].ai && !G.mp;
+  if (d > (me ? 3.2 : 2)) return false;
   if (o.trick && o.trick.hold && o.trick.ok) { q.downT = .4; return false; }
   const behind = ((q.x - o.x) * o.dx + (q.y - o.y) * o.dy) / (d || 1) < -.4;
-  const ch = clamp(.36 + (q.st.def - o.st.dri) * .9 + (q.st.phy - o.st.phy) * .25 - (behind ? .22 : 0) + (q.t === 0 && q === G.controlled ? .08 : 0) - (o.role === 'gk' ? .2 : 0), .08, .82);
+  const ch = clamp(.36 + (q.st.def - o.st.dri) * .9 + (q.st.phy - o.st.phy) * .25 - (behind ? .22 : 0) + (me ? .3 : 0) - (o.role === 'gk' ? .2 : 0), .08, me ? .95 : .82);
   if (Math.random() < ch) {
     tackleFx(q); if (q.t === 0 && !G.teams[0].ai) { G.qs.tackles++; superAdd(.12); popup(q, 'ČISTÝ ZÁKROK!', '#86efac'); } else G.passChain = 0;
     if (Math.random() < .55) take(q);
@@ -2977,6 +2978,12 @@ function headBall(q) {
 function pickup() {
   const b = G.ball;
   if (b.owner || G.state !== 'play') return;
+  // v22: „magnet“ – volný míč blízko tvého hráče se k němu stáčí
+  const cm = G.controlled;
+  if (cm && cm.t === 0 && !G.teams[0].ai && !G.mp && !(b.shot && b.shot.team === 0 && !b.shot.resolved) && !(b.pass && b.pass.team === 0 && b.pass.to !== cm) && b.noPick !== cm) {
+    const dx = cm.x - b.x, dy = cm.y - b.y, dd = Math.hypot(dx, dy);
+    if (dd < 4.5 && dd > .3 && b.z < 2) { const k = (1 - dd / 4.5) * .55; b.vx += dx / dd * k; b.vy += dy / dd * k; }
+  }
   const sp = Math.hypot(b.vx, b.vy);
   let best = null, bd = 1e9, kind = null;
   for (const q of G.players) {
@@ -2987,8 +2994,8 @@ function pickup() {
     const hands = q.role === 'gk' && inBox(q.t, b.x, b.y) && !backPass;
     // v21: hráči tvého týmu berou míč snáz (větší dosah, zpracují i rychlý nebo poskakující míč)
     const mine = q.t === 0 && !G.teams[0].ai && !G.mp, ctl = mine && q === G.controlled;
-    const reach = hands ? 1.05 + q.st.gk * .45 + (q.diveT > 0 ? 1 : 0) : (q.slideT > 0 ? 0 : ctl ? 1.3 : mine ? 1.05 : .72);
-    const zmax = hands ? 2.75 : mine ? 1.05 : .75;
+    const reach = hands ? 1.05 + q.st.gk * .45 + (q.diveT > 0 ? 1 : 0) : (q.slideT > 0 ? 0 : ctl ? 2.1 : mine ? 1.5 : .72);
+    const zmax = hands ? 2.75 : mine ? 1.6 : .75;
     if (d < reach && b.z < zmax) { if (d < bd) { bd = d; best = q; kind = hands ? 'hands' : 'feet'; } }
     else if (!hands && b.z >= .85 && b.z < 2.6 && d < 1.05 && !(q.headCd > 0)) { if (d + .3 < bd) { bd = d + .3; best = q; kind = 'head'; } }
   }
@@ -5452,7 +5459,7 @@ function userDown(code) {
   }
   if (simpleCtl() && code === 'Space' && !has) code = 'KeyL';
   if (code === 'KeyP') {
-    if (b.owner && b.owner.t !== c.t && Math.hypot(b.owner.x - c.x, b.owner.y - c.y) < 2.4) standTackle(c);
+    if (b.owner && b.owner.t !== c.t && Math.hypot(b.owner.x - c.x, b.owner.y - c.y) < 3.2) standTackle(c);
     else { const q = G.chaser2[0] || G.chaser[0]; if (q) q.pressT = 1.5; }
   } else if ((code === 'KeyL' || code === 'KeyK') && !has) {
     const id = inputDir();

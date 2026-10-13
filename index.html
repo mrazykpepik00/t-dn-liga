@@ -2640,6 +2640,8 @@ function computeChasers() {
     const humanClose = human && G.controlled && Math.hypot(G.controlled.x - fx, G.controlled.y - fy) / topSpeed(G.controlled) < list[0][1] * .9;
     if (!humanClose) G.chaser[t] = list[0][0];
     if (pt !== t && list[1] && list[1][1] < 3.2) G.chaser2[t] = humanClose ? list[0][0] : list[1][0];
+    // v21: u tvého týmu jde na volný míč vždycky i nejbližší spoluhráč (nikdo nestojí a nekouká)
+    if (human && !b.owner && humanClose && list[0][1] < 2.6) G.chaser[t] = list[0][0];
   }
 }
 function nearestOpp(p, x, y, r) {
@@ -2821,8 +2823,8 @@ function aiTackles(dt) {
   for (const q of G.players) {
     if (q.t === o.t || q.red || (q === G.controlled && q.t === 0 && !G.teams[0].ai) || q.role === 'gk' || q.downT > 0 || q.slideT > 0) continue;
     const d = Math.hypot(q.x - o.x, q.y - o.y);
-    if (d < 1.6 && q.tackleCd <= 0) {
-      const rate = (q.t === 1 ? 1.7 * G.D.press : 1.3) * dt;
+    if (d < (q.t === 0 ? 1.9 : 1.6) && q.tackleCd <= 0) {
+      const rate = (q.t === 1 ? 1.7 * G.D.press : 2.1) * dt;   // v21: spoluhráči bojují o míč aktivněji
       if (Math.random() < rate) standTackle(q);
     } else if (d < 2.8 && d > 1.4 && (q.t === 1 || G.teams[0].ai)) {
       const away = (o.vx * (o.x - q.x) + o.vy * (o.y - q.y)) > 0;
@@ -2892,7 +2894,8 @@ function autoSwitch(dt) {
     if (p.t !== 0 || p.red || p.role === 'gk') continue;
     const d = Math.hypot(p.x - b.x, p.y - b.y); if (d < bd) { bd = d; best = p; }
   }
-  if (best && best !== c && dc > 9 && bd < dc * .6) { G.controlled = best; G.autoT = .7; G.charge = -1; }
+  const loose = !b.owner && !(b.pass && b.pass.team === 0);
+  if (best && best !== c && (loose ? dc > 4.5 && bd < dc * .7 : dc > 9 && bd < dc * .6)) { G.controlled = best; G.autoT = loose ? .5 : .7; G.charge = -1; }
 }
 
 /* ---------- rozhodčí ---------- */
@@ -2982,8 +2985,10 @@ function pickup() {
     const d = Math.hypot(q.x - b.x, q.y - b.y);
     const backPass = b.last && b.last.t === q.t && b.last !== q && (b.kind === 'pass' || b.kind === 'long' || b.kind === 'throw');
     const hands = q.role === 'gk' && inBox(q.t, b.x, b.y) && !backPass;
-    const reach = hands ? 1.05 + q.st.gk * .45 + (q.diveT > 0 ? 1 : 0) : (q.slideT > 0 ? 0 : .72);
-    const zmax = hands ? 2.75 : .75;
+    // v21: hráči tvého týmu berou míč snáz (větší dosah, zpracují i rychlý nebo poskakující míč)
+    const mine = q.t === 0 && !G.teams[0].ai && !G.mp, ctl = mine && q === G.controlled;
+    const reach = hands ? 1.05 + q.st.gk * .45 + (q.diveT > 0 ? 1 : 0) : (q.slideT > 0 ? 0 : ctl ? 1.3 : mine ? 1.05 : .72);
+    const zmax = hands ? 2.75 : mine ? 1.05 : .75;
     if (d < reach && b.z < zmax) { if (d < bd) { bd = d; best = q; kind = hands ? 'hands' : 'feet'; } }
     else if (!hands && b.z >= .85 && b.z < 2.6 && d < 1.05 && !(q.headCd > 0)) { if (d + .3 < bd) { bd = d + .3; best = q; kind = 'head'; } }
   }
@@ -2998,13 +3003,14 @@ function pickup() {
   if (b.trickBy === q) { take(q); return; }
   if (b.shot && b.shot.team !== q.t && sp > 14 && !b.shot.resolved) { deflect(q, .45); banner('ZBLOKOVÁNO', q.name, '#94a3b8', 1); return; }
   const target = b.pass && b.pass.to === q, foe = b.pass && b.pass.team !== q.t;
+  const mineQ = q.t === 0 && !G.teams[0].ai && !G.mp;
   if (foe && sp > 8 && !q.triedT) {
     q.triedT = .35;
-    const ch = clamp(.3 + q.st.def * .45 - (sp - 8) * .045, .1, .8);
+    const ch = clamp(.3 + q.st.def * .45 - (sp - 8) * .045 + (mineQ ? (q === G.controlled ? .4 : .22) : 0), .1, .92);
     if (Math.random() > ch) { if (Math.random() < .3) deflect(q, .5); else { b.noPick = q; b.noPickT = .25; } return; }
   } else if (foe && q.triedT > 0) return;
-  if (sp > 18 && !target) { if (Math.random() > .4 + q.st.dri * .4) { deflect(q, .35); return; } }
-  if (sp > 27) { if (Math.random() > .55 + q.st.dri * .35) { deflect(q, .3); return; } }
+  if (sp > 18 && !target && !mineQ) { if (Math.random() > .4 + q.st.dri * .4) { deflect(q, .35); return; } }
+  if (sp > 27 && !mineQ) { if (Math.random() > .55 + q.st.dri * .35) { deflect(q, .3); return; } }
   take(q);
 }
 

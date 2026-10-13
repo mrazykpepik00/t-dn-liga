@@ -610,6 +610,52 @@ body.touch .fs-btn{display:none}
 /* v19: hra přes celou obrazovku bez okrajů */
 #game{position:fixed!important;inset:0!important;padding:0!important;background:#050816}
 #game .stage,body.touch #game .stage{position:absolute!important;inset:0!important;width:100vw!important;height:100vh!important;height:100dvh!important;aspect-ratio:auto!important;max-width:none!important;border-radius:0!important;box-shadow:none!important}
+/* v20 obchod: vše na jedné obrazovce + víc balíčků najednou */
+#store .packs{grid-template-columns:repeat(3,1fr);gap:12px}
+@media(max-width:1100px){#store .packs{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:620px){#store .packs{grid-template-columns:1fr}}
+#store .pack-tile{display:flex;gap:14px;align-items:center;text-align:left;padding:12px 14px;border-radius:16px}
+#store .pack-tile .pack{width:84px;height:112px;font-size:13px;margin:0;flex:none}
+#store .pt-info{flex:1;min-width:0}
+#store .pack-tile h3{font-size:20px;margin:0 0 2px}
+#store .pack-tile p{min-height:0;margin:0 0 4px;font-size:12.5px}
+#store .pk-odds{justify-content:flex-start;margin:2px 0 6px;font-size:11px;gap:3px}
+#store .pk-odds span{padding:1px 5px}
+.pt-btns{display:flex;gap:6px}
+.pt-btns .pk-buy{flex:1;padding:8px 4px;font-size:15px;border-radius:10px;letter-spacing:.02em;white-space:nowrap}
+.pt-btns .pk-buy b{display:block;font-size:12px;opacity:.75}
+.pt-btns .pk-buy.multi{background:#ffd24d}
+.pt-btns .pk-buy.free{background:linear-gradient(90deg,#ffd24d,#00e0a4)}
+.pt-btns .pk-buy:disabled{opacity:.35;filter:grayscale(.6)}
+.pt-free{font:700 13px var(--cond);color:#1a1200;background:#ffd24d;padding:1px 7px;border-radius:99px;vertical-align:middle}
+.bp-wrap{position:relative}
+.bp-ghost{position:absolute;inset:0;margin:0 auto;pointer-events:none;opacity:.7}
+.bp-ghost.g1{transform:translate(14px,-10px) rotate(6deg)}.bp-ghost.g2{transform:translate(-14px,-6px) rotate(-6deg)}
+.bp-cnt{position:absolute;right:-14px;top:-14px;background:#ef4444;color:#fff;font:900 22px var(--cond);padding:4px 10px;border-radius:99px;box-shadow:0 0 18px #ef4444}
+.po-sum{display:flex;gap:16px;justify-content:center;flex-wrap:wrap;font:700 17px var(--cond);margin:-4px 0 10px;color:#c9d2f5}.po-sum b{color:#fff}
+.po-grid.many{gap:10px;max-height:62vh;overflow:auto;padding:6px}
+.po-grid.many .po-item .card{--cs:8.5px}.po-grid.many .badge{font-size:11px}
+/* v20: mobil na šířku – celé rozhraní se zmenší jako na počítači */
+@media (orientation:landscape) and (max-height:520px){
+  .screen,.modal-box,.po-stage{zoom:var(--mz,.6)}
+  .screen{max-width:none;padding:10px 22px 20px}
+  #store .packs{grid-template-columns:repeat(3,1fr)}
+  .menu-hero{height:calc(100vh / var(--mz,.6) - 190px);min-height:0;grid-template-columns:1.5fr 1fr!important}
+  .hero-side{grid-template-rows:1fr 1fr!important;grid-template-columns:none!important}
+  .hero-side .tile{min-height:0!important;font-size:30px!important}
+  #starterBanner:not([hidden])~.menu-hero,#bonusBanner:not([hidden])~.menu-hero{height:calc(100vh / var(--mz,.6) - 320px)}
+  .menubar{bottom:8px}
+  .sheet{max-height:calc(100vh / var(--mz,.6) - 140px)}
+  .squad-wrap{grid-template-columns:1fr 300px!important}
+  .pitch-ui{aspect-ratio:auto;height:calc(100vh / var(--mz,.6) - 120px)}
+  .modal{align-items:center}
+  .modal-box{max-height:calc(96vh / var(--mz,.6));overflow:auto}
+  .po-grid.many{max-height:calc(100vh / var(--mz,.6) - 230px)}
+  .toast{zoom:.7}
+  .showcase{display:block!important}
+}
+.sheet-grid{grid-template-columns:repeat(3,1fr)!important}.sheet-grid .tile{grid-column:auto!important;min-height:150px;padding-top:34px}
+@media(max-width:620px){.sheet-grid{grid-template-columns:1fr!important}}
 </style>
 </head>
 <body>
@@ -1317,13 +1363,15 @@ $('#starterBanner').onclick = () => openPack('starter');
 $('#bonusBanner').onclick = () => openPack('bonus11');
 
 function renderStore() {
+  const fp = state.freePacks || {};
   $('#packs').innerHTML = (state.starter ? [] : ['starter']).concat(['bronze', 'gold', 'premium', 'tots', 'toty', 'legend']).map(k => {
-    const P = PACKS[k];
-    return `<div class="pack-tile"><div class="pack ${k}">${P.name}<br>balíček</div>
-      <h3>${P.name} balíček</h3><p>${k === 'starter' ? '11 hráčů do začátku a 500 mincí navíc.' : P.desc}</p>${k === 'starter' ? '' : oddsHTML2(k)}
-      ${(state.freePacks || {})[k] > 0 ? `<button class="primary free" data-pack="${k}">🎁 Otevřít zdarma (${state.freePacks[k]}×)</button>` : `<button class="primary" data-pack="${k}" ${state.coins < P.price ? 'disabled' : ''}>${P.price ? `<span class="price">🪙</span> ${P.price}` : 'Zdarma'}</button>`}</div>`;
+    const P = PACKS[k], f = fp[k] || 0;
+    const btn = n => { const pay = Math.max(0, n - f) * P.price, ok = state.coins >= pay; return `<button class="primary pk-buy ${n > 1 ? 'multi' : ''} ${f >= n ? 'free' : ''}" data-pack="${k}" data-n="${n}" ${ok ? '' : 'disabled'}>${n > 1 ? `<b>×${n}</b>` : ''}${pay ? `🪙 ${pay >= 1e5 ? Math.round(pay / 1000) + 'k' : pay.toLocaleString('cs-CZ')}` : '🎁 Zdarma'}</button>`; };
+    return `<div class="pack-tile ${k}"><div class="pack ${k}">${P.name}<br>balíček</div>
+      <div class="pt-info"><h3>${P.name}${f ? ` <span class="pt-free">🎁 ${f}× zdarma</span>` : ''}</h3><p>${k === 'starter' ? '11 hráčů do začátku a 500 mincí navíc.' : P.desc}</p>${k === 'starter' ? '' : oddsHTML2(k)}
+      <div class="pt-btns">${k === 'starter' ? btn(1) : [1, 5, 10].map(btn).join('')}</div></div></div>`;
   }).join('');
-  $$('[data-pack]').forEach(b => b.onclick = () => openPack(b.dataset.pack));
+  $$('[data-pack]').forEach(b => b.onclick = () => openPack(b.dataset.pack, +b.dataset.n || 1));
 }
 
 /* ---------- balíčky ---------- */
@@ -1373,14 +1421,22 @@ function pickLegend(used) {
   let x = Math.random() * tot; for (let i = 0; i < L.length; i++) { x -= w[i]; if (x <= 0) return L[i]; }
   return L[L.length - 1];
 }
-function openPack(kind) {
+function openPack(kind, cnt) {
   const P = PACKS[kind];
   if (!state.people.length) { toast('Nejdřív přidej spolužáky.'); return; }
   if (kind === 'starter' && state.starter) return;
   if (kind === 'bonus11' && state.bonus11) return;
-  const free = state.freePacks && state.freePacks[kind] > 0;
-  if (!free && state.coins < P.price) { toast('Nemáš dost mincí. Zahraj si zápas!'); return; }
-  if (free) state.freePacks[kind]--; else state.coins -= P.price;
+  cnt = Math.max(1, cnt || 1);
+  // v20: víc balíčků najednou – nejdřív se použijí balíčky zdarma, zbytek za mince
+  const fr = Math.min(cnt, (state.freePacks && state.freePacks[kind]) || 0), pay = (cnt - fr) * P.price;
+  if (state.coins < pay) { toast(cnt > 1 ? `Na ${cnt} balíčků nemáš dost mincí.` : 'Nemáš dost mincí. Zahraj si zápas!'); return; }
+  if (fr) state.freePacks[kind] -= fr; state.coins -= pay;
+  const all = [];
+  for (let k = 0; k < cnt; k++) all.push(...rollPack(kind));
+  finishPack(kind, all, cnt);
+}
+function rollPack(kind) {
+  const P = PACKS[kind];
   const used = new Set(), res = [];
   const pat = ['BR', 'OBR', 'OBR', 'OBR', 'OBR', 'OBR', 'UTO', 'UTO', 'UTO', 'UTO', 'UTO'], pat2 = ['BR', 'OBR', 'OBR', 'OBR', 'UTO', 'UTO', 'UTO', 'OBR'];
   const bump = ri(0, P.n - 1);
@@ -1398,6 +1454,9 @@ function openPack(kind) {
     used.add(p.id);
     res.push({ p, R, special });
   }
+  return res;
+}
+function finishPack(kind, res, cnt) {
   if (kind === 'starter') { state.starter = true; state.bonus11 = true; state.coins += 500; }
   if (kind === 'bonus11') state.bonus11 = true;
   for (const r of res) {
@@ -1409,13 +1468,13 @@ function openPack(kind) {
   }
   if (kind === 'starter' || kind === 'bonus11') autoSquad();
   save(); refreshCoins();
-  showPackOpening(kind, res);
+  showPackOpening(kind, res, cnt);
   setTimeout(() => { const m = albumCheck(); if (m.length) { save(); refreshCoins(); m.forEach((x, i) => setTimeout(() => toast('📒 ' + x), i * 1600)); } }, 2500);
 }
-function showPackOpening(kind, res) {
+function showPackOpening(kind, res, cnt) {
   const ov = $('#packOpen'), st = $('#poStage');
-  ov.hidden = false;
-  st.innerHTML = `<div class="pack bigpack ${kind}" id="bp">${PACKS[kind].name}<br>balíček</div><div class="pk-hint">Klikni a otevři</div>`;
+  ov.hidden = false; st.dataset.cnt = cnt || 1;
+  st.innerHTML = `<div class="bp-wrap">${cnt > 1 ? `<div class="pack bigpack ${kind} bp-ghost g2"></div><div class="pack bigpack ${kind} bp-ghost g1"></div>` : ''}<div class="pack bigpack ${kind}" id="bp">${PACKS[kind].name}<br>balíček${cnt > 1 ? `<b class="bp-cnt">×${cnt}</b>` : ''}</div></div><div class="pk-hint">Klikni a otevři</div>`;
   let opened = false;
   $('#bp').onclick = () => {
     if (opened) return; opened = true;
@@ -1446,9 +1505,11 @@ function walkout(r, done) {
 }
 function summary(kind, res) {
   const st = $('#poStage');
-  const sorted = [...res].sort((a, b) => b.R - a.R);
-  st.innerHTML = `<h2 class="po-title">${PACKS[kind].name} balíček</h2>
-    <div class="po-grid">${sorted.map((r, i) => `<div class="po-item" style="animation-delay:${i * .12}s">${cardHTML(r.p, r.card)}
+  const sorted = [...res].sort((a, b) => (b.card.tier === 'legend') - (a.card.tier === 'legend') || b.R - a.R), cnt = +st.dataset.cnt || 1;
+  const nNew = res.filter(r => r.result === 'new').length, nUp = res.filter(r => r.result === 'up').length, dc = res.reduce((s, r) => s + (r.coins || 0), 0);
+  st.innerHTML = `<h2 class="po-title">${PACKS[kind].name} balíček${cnt > 1 ? ` ×${cnt}` : ''}</h2>
+    ${cnt > 1 ? `<div class="po-sum"><span>🆕 Nových: <b>${nNew}</b></span><span>⬆ Vylepšeno: <b>${nUp}</b></span><span>♻ Duplikáty: <b>+${dc.toLocaleString('cs-CZ')} 🪙</b></span></div>` : ''}
+    <div class="po-grid ${cnt > 1 ? 'many' : ''}">${sorted.map((r, i) => `<div class="po-item" style="animation-delay:${Math.min(i, 20) * (cnt > 1 ? .05 : .12)}s">${cardHTML(r.p, r.card)}
       <div class="badge ${r.result}">${r.result === 'new' ? 'Nový hráč!' : r.result === 'up' ? `Vylepšeno ${r.old} → ${r.R}` : `Duplikát +${r.coins} 🪙`}</div></div>`).join('')}</div>
     ${kind === 'starter' ? '<p class="hint">+500 mincí na další balíčky. Hráči jsou už v sestavě.</p>' : kind === 'bonus11' ? '<p class="hint">Sestava se sama doplnila na 11 hráčů + lavičku.</p>' : ''}
     <button class="primary" id="poDone">Hotovo</button>`;

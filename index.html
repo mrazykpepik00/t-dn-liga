@@ -1904,7 +1904,7 @@ function startMatch(opts) {
     parts: [], flashes: [], trail: [], shake: 0, flashA: 0, net: null, goalT: 0, rec: [], recT: 0, clock2: 0, gphase: null, crowd: makeCrowd(), ratings: [0, 0], pens: null,
     camX: MX, camZ: 1, offs: [], benchShow: 0, hintT: 0, fw2: []
   };
-  G.ulti = mp || opts.practice ? null : ultiOpen(state.ulti || 'super') ? (state.ulti || 'super') : 'super';
+  G.ultiOn = !mp && !opts.practice; G.armed = [false, false]; G.aiMeter = 0; G.oppSig = oppSignature(T, diff);
   if (opts.mpNames) opts.mpNames.forEach((n, t) => { G.teams[t].name = n[0]; G.teams[t].short = n[1]; });
   if (opts.mpHalf) G.realHalf = opts.mpHalf;
   G.bench = [[], []];
@@ -2121,9 +2121,9 @@ function doPass(p, mode, ax, ay, opts) {
   }
   const d = Math.hypot(tx - p.x, ty - p.y), pr = pressureOn(p);
   const err = Math.max(.12, 1 - S) * (mode === 'long' ? 5 : 2.6) * (1 + pr * .8) * (2 - aiAcc) + d * .02;
-  const gpt = t === 0 && G.gptT > 0, duha = t === 1 && G.duhaT > 0 && Math.random() < .7;
+  const gpt = G.fxGpt && G.fxGpt.t === t, duha = G.fxDuha && G.fxDuha.t !== t && Math.random() < .8;
   if (!gpt) { tx += gauss() * err; ty += gauss() * err; }
-  if (duha) { let nq = null, nd = 1e9; for (const o of G.players) if (o.t === 0 && !o.red && o.role !== 'gk') { const dd2 = Math.hypot(o.x - p.x, o.y - p.y); if (dd2 < nd && dd2 > 3) { nd = dd2; nq = o; } } if (nq) { tx = nq.x; ty = nq.y; popup(p, '🌈 ZMATEK!', '#f0abfc'); } }
+  if (duha) { let nq = null, nd = 1e9; for (const o of G.players) if (o.t === G.fxDuha.t && !o.red && o.role !== 'gk') { const dd2 = Math.hypot(o.x - p.x, o.y - p.y); if (dd2 < nd && dd2 > 3) { nd = dd2; nq = o; } } if (nq) { tx = nq.x; ty = nq.y; popup(p, '🌈 ZMATEK!', '#f0abfc'); } }
   const ux = tx - p.x, uy = ty - p.y, dd = Math.hypot(ux, uy);
   const pm = pw == null ? 1 : .74 + .5 * pw;
   if (mode === 'lobthrough') {
@@ -2181,10 +2181,10 @@ function shoot(p, power, aimY, aimZ, kind) {
   }
   if (aimZ == null) aimZ = kind === 'header' ? .3 + Math.random() * .7 : .25 + Math.random() * (power > .7 ? 1.6 : .9);
   const pr = pressureOn(p);
-  const sup = !cpu && t === 0 && G.superM >= 1 && kind !== 'header' && (!G.practice || G.tut) && (!G.ulti || G.ulti === 'super');
-  const jach = t === 0 && G.jachymT > 0;
-  if (jach) { G.jachymT = 0; speed = Math.min(44, speed * 1.5 + 6); const gk = gkOf(1); if (gk) { gk.downT = 1.8; gk.fallT = 1.8; gk.dizzyT = 2; } ultiBanner('ŘEDITELKO, UHNĚTE!', '#ef4444'); G.shake = 2.4; }
-  if (t === 0 && p.perfectT > 0 && aimY == null) aimY = (Math.random() < .5 ? -1 : 1) * (GW / 2 - .6);
+  const sup = G.armed && G.armed[t] && kind !== 'header';
+  const jach = G.fxJach && G.fxJach.t === t;
+  if (jach) { G.fxJach = null; speed = Math.min(44, speed * 1.5 + 6); const gk = gkOf(1 - t); if (gk) { gk.downT = 1.8; gk.fallT = 1.8; gk.dizzyT = 2; } ultiBanner('ŘEDITELKO, UHNĚTE!', '#ef4444'); G.shake = 2.4; }
+  if (p.perfectT > 0 && aimY == null) aimY = (Math.random() < .5 ? -1 : 1) * (GW / 2 - .6);
   if (sup) { speed = Math.min(40, speed * 1.4 + 4); superFire(p); }
   const err = 2.4 * (Math.max(.1, .3 + (1 - S) * 2.2) + power * .8 + Math.max(0, d - 15) * .07 + pr * 1.1) * (cpu ? (2 - G.D.acc) * (1 + (G.assist || 0) * .6) : 1 - (G.assist || 0) * .3) * (kind === 'header' ? 1.3 : kind === 'bicycle' ? 1.55 : kind === 'volley' ? 1.25 : 1) * (sup ? .3 : 1) * (jach || p.perfectT > 0 ? .15 : 1);
   const ty = CY + aimY + gauss() * err;
@@ -2628,7 +2628,7 @@ function aiSubs() {
 
 /* ================= POHYB A UMĚLÁ INTELIGENCE ================= */
 function topSpeed(p) { return (4.4 + 3.3 * p.st.spd) * staminaF(p); }
-function speedCap(p, sprint) { return topSpeed(p) * (sprint ? 1.23 : 1) * (G.ball.owner === p ? .9 : 1) * (p.downT > 0 ? .25 : 1) * (p.boostT > 0 ? 1.12 : 1) * (p.cubeT > 0 ? 1.22 : 1) * (p.bossT > 0 ? 1.15 : 1) * (p.freezeT > 0 ? 0 : 1); }
+function speedCap(p, sprint) { return topSpeed(p) * (sprint ? 1.23 : 1) * (G.ball.owner === p ? .9 : 1) * (p.downT > 0 ? .25 : 1) * (p.boostT > 0 ? 1.12 : 1) * (p.cubeT > 0 ? 1.22 : 1) * (p.bossT > 0 ? 1.15 : 1) * (p.freezeT > 0 ? 0 : 1) * (p.fogT > 0 ? .55 : 1); }
 function steer(p, tx, ty, speed, arrive) {
   arrive = arrive || 2.5;
   const dx = tx - p.x, dy = ty - p.y, d = Math.hypot(dx, dy);
@@ -3122,6 +3122,8 @@ function afterGoal() {
 function update(dt) {
   if (G.mp === 'guest') { mpGuestFrame(dt); return; }
   if (G.mp === 'host') mpHostUpd(dt);
+  if (G.upick) { updParts(dt); G.upick.t += dt; if (G.upick.t > 12) ultiChoose(1); return; }
+  if (G.cine) { const C = G.cine; C.t += dt; updParts(dt); if (C.t < C.intro) return; if (!C.done) { C.done = true; applyUlti(C); } if (C.t > C.intro + C.act) G.cine = null; else dt *= .5; }
   updParts(dt); updFlashes(dt);
   for (const bn of G.banners) bn.t += dt;
   G.banners = G.banners.filter(bn => bn.t < bn.dur);
@@ -3182,7 +3184,7 @@ function update(dt) {
     else if (G.mp === 'host' && p === G.c2 && G.state === 'play') { const cv2 = MP.held.KeyC && b.owner !== p ? containVel(p) : null; [tvx, tvy] = cv2 || mpRemoteMove(p); }
     else if (p.pileT > 0 && G.state === 'play') { p.pileT -= dt; const tg = G.pileTgt; [tvx, tvy] = tg ? steer(p, tg.x, tg.y, speedCap(p, true) * 1.15, .3) : [0, 0]; }
     else if (p.freezeT > 0) { tvx = 0; tvy = 0; }
-    else if (p.t === 0 && p === G.controlled && G.state === 'play' && !G.teams[0].ai && !(G.aiT > 0)) { const cv2 = keys.KeyC && b.owner !== p ? containVel(p) : null; [tvx, tvy] = cv2 || humanMove(p); }
+    else if (p.t === 0 && p === G.controlled && G.state === 'play' && !G.teams[0].ai && !(G.autoPilotT > 0)) { const cv2 = keys.KeyC && b.owner !== p ? containVel(p) : null; [tvx, tvy] = cv2 || humanMove(p); }
     else [tvx, tvy] = ai(p, dt);
     if (G.state !== 'play' && G.state !== 'dead') return;
     if (!(p.slideT > 0)) {
@@ -3860,15 +3862,18 @@ function draw() {
   else if (st === 'goal' && gp === 'celeb') drawCeleb();
   else if (st === 'goal' && gp === 'replay') drawReplay();
   else {
-    drawWorld(G.zoomK > 0 ? { x: G.camX, z: 1 + G.zoomK } : null);
+    drawWorld(G.cine ? cineCam() : G.zoomK > 0 ? { x: G.camX, z: 1 + G.zoomK } : null);
+    if (G.cine) { drawCine(); return; }
     drawHUD();
-    if (st === 'play' || st === 'dead') { drawRadar(); drawCtrlCard(); drawOppCard(); drawSPHint(); drawPowerMeter(); drawSuperBar(); drawHype(); if (G.tut) drawTut(); }
+    if (st === 'play' || st === 'dead') { drawRadar(); drawCtrlCard(); drawOppCard(); drawSPHint(); drawPowerMeter(); drawSuperBar(); drawOppUltiBar(); drawHype(); if (G.tut) drawTut(); }
     if (st === 'dead' && G.dead && G.dead.phase === 'card') drawCardShow();
     if (st === 'goal' && G.msg) { drawGoalText(); drawHype(); if (gp === 'choose') drawChoice(); }
     if (st === 'half') drawHalfTime();
     if (st === 'var') drawVAR();
     if (st !== 'half') drawBanners();
   }
+  if (G.upick) drawUltiPick();
+  if (G.fogMe > 0) { ctx.fillStyle = `rgba(200,210,220,${Math.min(.55, G.fogMe * .2)})`; ctx.fillRect(0, 0, W, H); }
   if (G.cut >= 0) { ctx.fillStyle = `rgba(3,5,14,${Math.sin(Math.PI * clamp(G.cut / .5, 0, 1))})`; ctx.fillRect(0, 0, W, H); }
   if (G.flashA > 0) { ctx.fillStyle = `rgba(255,255,255,${G.flashA * .5})`; ctx.fillRect(0, 0, W, H); }
   if (G.paused) { ctx.fillStyle = 'rgba(5,8,22,.55)'; ctx.fillRect(0, 0, W, H); }
@@ -5452,7 +5457,7 @@ function loop(now) {
   if (!G || !G.running) return;
   const dt = Math.min(.033, (now - lastT) / 1000); lastT = now;
   if (!G.paused) { const sk = G.slowT > 0 ? .38 : 1; G.slowT = Math.max(0, (G.slowT || 0) - dt); update(dt * sk * (G.state === 'play' || G.state === 'dead' ? GAME_SPEED : 1)); }
-  if (IS_TOUCH && (G.frameN = (G.frameN || 0) + 1) % 10 === 0) { const sb = $('.tb-shot'); if (sb) sb.classList.toggle('super', G.superM >= 1 && (!G.ulti || G.ulti === 'super')); const ub = $('.tb-ulti'); if (ub) { ub.hidden = !G.ulti || G.ulti === 'super'; ub.classList.toggle('ready', G.superM >= 1); } }
+  if (IS_TOUCH && (G.frameN = (G.frameN || 0) + 1) % 10 === 0) { const sb = $('.tb-shot'); if (sb) sb.classList.toggle('super', !!(G.armed && G.armed[0])); const ub = $('.tb-ulti'); if (ub) { ub.hidden = !G.ultiOn; ub.classList.toggle('ready', G.superM >= 1); } }
   if (G.running) { draw(); requestAnimationFrame(loop); }
 }
 const KICKS = ['Space', 'KeyP', 'KeyL', 'KeyI', 'KeyU'];
@@ -5469,7 +5474,7 @@ function userDown(code) {
     return;
   }
   if (G.state !== 'play' || !c) return;
-  if (code === 'KeyE') { if (G.superM >= 1 && G.ulti && G.ulti !== 'super' && !G.practice) fireUlti(); return; }
+  if (code === 'KeyE') { openUltiPick(); return; }
   const has = b.owner === c;
   if (has && code === 'KeyP' && G.charge >= 0 && G.chargeKey === 'Space') { fakeShot(c); return; }
   if (has && KICKS.includes(code)) {
@@ -5532,6 +5537,7 @@ addEventListener('keydown', e => {
   if (e.repeat) return;
   if (code === 'KeyM') { toggleMute(); return; }
   if (code === 'Escape') { setPaused(true); return; }
+  if (G.upick || G.cine) { ultiKey(code); return; }
   if (G.state !== 'play' && G.state !== 'dead') { specialKey(code); return; }
   if (simpleCtl() && simpleDouble(code)) return;
   userDown(code);
@@ -6042,11 +6048,11 @@ function superAdd(v) {
   if (!G || (G.practice && !G.tut)) return;
   const was = G.superM >= 1;
   G.superM = Math.min(1, (G.superM || 0) + v);
-  if (!was && G.superM >= 1) { hype('SUPER NABITÁ!', '#ffb020', `Drž ${kOf('shoot')} a vystřel`); SFX.coin(); }
+  if (!was && G.superM >= 1) { if (G.tut) G.armed[0] = true; else hype('ULTI NABITÁ!', '#ffb020', `Zmáčkni ${kOf('ulti')} a vyber si`); SFX.coin(); }
 }
 function superFire(p) {
   if (G.tut) tutEv('super');
-  G.superM = 0; G.slowT = .55; G.shake = 2.2; G.flashA = .55;
+  if (G.armed) G.armed[p.t] = false; if (G.tut) G.superM = 0; G.slowT = .55; G.shake = 2.2; G.flashA = .55;
   zoomPunch(p, .22);
   hype('SUPER STŘELA!', '#ff6a00');
   for (let i = 0; i < 40; i++) fxAdd(p.x, p.y, .5, (Math.random() - .5) * 8, (Math.random() - .5) * 8, Math.random() * 5, .6 + Math.random() * .4, i % 2 ? '#ffb020' : '#ff3d00', 5);
@@ -6132,8 +6138,8 @@ function drawSuperBar() {
   ctx.save();
   ctx.fillStyle = 'rgba(5,8,22,.7)'; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x - 6, y - 26, w + 12, hh + 34, 10) : ctx.rect(x - 6, y - 26, w + 12, hh + 34); ctx.fill();
   ctx.font = `900 16px ${COND}`; ctx.textAlign = 'left'; ctx.fillStyle = full ? '#ffb020' : '#c9d2f5';
-  const U = G.ulti && G.ulti !== 'super' ? ULTIS[G.ulti] : null;
-  ctx.fillText(full ? (U ? `${U.ico} ULTI ${U.name.toUpperCase()}! (${kOf('ulti')})` : `⚡ SUPER! Vystřel (${kOf('shoot')})`) : (U ? `${U.ico} ULTI: ${U.name}` : '⚡ SUPER'), x, y - 8);
+  const armed = G.armed && G.armed[0];
+  ctx.fillText(armed ? `⚡ SUPER STŘELA – vystřel (${kOf('shoot')})` : full ? `🔥 ULTI! Zmáčkni ${kOf('ulti')}` : '🔥 ULTI', x, y - 8);
   ctx.fillStyle = '#ffffff1a'; ctx.fillRect(x, y, w, hh);
   const g = ctx.createLinearGradient(x, 0, x + w, 0); g.addColorStop(0, '#ffe14d'); g.addColorStop(1, '#ff3d00');
   ctx.fillStyle = g; ctx.fillRect(x, y, w * v, hh);
@@ -6334,7 +6340,7 @@ const TUT = [
   { t: 'Trik', d: () => `${kOf('trick')} + šipka: sám = přešlapovačka, dopředu = jesličky, dozadu = Cruyff, nahoru/dolů = ruleta.`, ev: 'trick', n: 2 },
   { t: 'Kouzlo s míčem', d: () => `${kOf('flick')} + šipka: sombrero, elastico nebo la croqueta.`, ev: 'flick' },
   { t: 'Falešná střela', d: () => `Začni nabíjet ${kOf('shoot')} a zmáčkni ${kOf('pass')}. Obránce naletí.`, ev: 'fake' },
-  { t: 'SUPER střela', d: () => 'SUPER se plní za přihrávky, triky a zákroky. Teď ji máš nabitou – vystřel!', ev: 'super', setup: () => { G.superM = 1; } },
+  { t: 'SUPER střela', d: () => 'SUPER se plní za přihrávky, triky a zákroky. Teď ji máš nabitou – vystřel!', ev: 'super', setup: () => { G.armed[0] = true; } },
   { t: 'Bránění', d: () => `Bez míče: ${kOf('pass')} zákrok, ${kOf('long')} skluz, drž ${kOf('contain')} = zdržování, ${kOf('switch')} = přepnout hráče. Zmáčkni ${kOf('switch')}.`, ev: 'KeyO' }
 ];
 function startTutorial() {
@@ -6721,135 +6727,359 @@ $('#giftClaim').onclick = () => {
 };
 
 /* ---- e12_ulti.js ---- */
-/* ================= v23: ULTI – školní schopnosti (jako super v Brawl Stars) ================= */
-/* Plní se stejný ukazatel SUPER. Když je plný, Mezerník spustí vybranou ULTI místo super střely. */
+/* ================= v24: ULTI – školní schopnosti s filmovou cutscénou ================= */
+/* Ukazatel ULTI se plní za akce. E = nabídka 3 náhodných ULTI → vybereš → cutscéna → efekt ve hře.
+   Soupeř má vlastní ukazatel, svoji podpisovou ULTI a používá i ty školní proti tobě. */
 const ULTIS = {
-  super:   { name: 'Super střela', ico: '⚡', lvl: 1, d: 'Ohnivá střela, kterou brankář skoro nechytí.' },
-  prdomet: { name: 'Prdomet', ico: '💨', lvl: 1, d: 'Nelly vypustí mega prd. Zelený mrak omámí soupeře kolem a ti utíkají pryč.' },
-  krychle: { name: 'Krychle', ico: '🟨', lvl: 1, d: 'Hlava jak hrana. 6 s jsi nezastavitelný: rychlejší a kdo do tebe vleze, odrazí se.' },
-  naklad:  { name: 'Nakládačka', ico: '🛋️', lvl: 1, d: 'Celý tým naskočí na soupeře s míčem jako na lavici. Míč je váš.' },
-  ovoce:   { name: 'Ovocná bitva', ico: '🍎', lvl: 2, d: 'Přes hřiště létá ovoce a sejme soupeře, kteří stojí v cestě.' },
-  vojta:   { name: 'Vojtův otřes', ico: '💫', lvl: 3, d: 'Rázová vlna: soupeři kolem tebe vidí hvězdičky a válí se po zemi.' },
-  duha:    { name: 'Aleš Duha', ico: '🌈', lvl: 4, d: 'Barvy se mění tak rychle, že soupeř 7 s přihrává tvému týmu.' },
-  gpt:     { name: 'Říša GPT', ico: '🤖', lvl: 5, d: '10 s generuje dokonalé přihrávky a ukazuje, kam poletí míč.' },
-  ai:      { name: 'Účetní AI', ico: '🧮', lvl: 6, d: 'Soupeřům spadne systém (ERROR) a tvůj hráč 6 s hraje sám na autopilota.' },
-  audina:  { name: 'Piráti silnic', ico: '🚗', lvl: 7, d: 'Přes hřiště prosviští Audina a smete všechny soupeře v pruhu.' },
-  jachym:  { name: 'Jácha vs. ředitelka', ico: '💥', lvl: 8, d: 'Další střela je tak strašná, že sejme i brankáře. Skoro jistý gól.' },
-  junikorn: { name: 'Klárčin junikorn', ico: '🦄', lvl: 2, d: 'Přiletí jednorožec a hází blesky do soupeřů. Kdo dostane blesk, leží.' },
-  slavik:  { name: 'Slavík Boss', ico: '👑', lvl: 10, d: 'Umí každý sport: 8 s má tvůj hráč 99 ve všem a zlatou auru.' }
+  super:    { name: 'Super střela', ico: '⚡', hero: 'Kanonýr', col: '#ff6a00', line: 'Brankáři, modli se.', d: 'Další střela je ohnivá a skoro nechytatelná.' },
+  prdomet:  { name: 'Prdomet', ico: '💨', hero: 'Nelly', col: '#84cc16', line: 'Celé hřiště. Všichni. Teď.', d: 'Mega prd přes celé hřiště: všichni soupeři leží, kašlou a pak utíkají pryč.' },
+  krychle:  { name: 'Krychle', ico: '🟨', hero: 'Hranatá hlava', col: '#facc15', line: 'Hlava jak hrana. Nezastavitelný.', d: '8 s hranatá hlava: rychlejší, nedá se ti vzít míč, kdo do tebe vleze, letí.' },
+  naklad:   { name: 'Nakládačka', ico: '🛋️', hero: 'Celá třída', col: '#f97316', line: 'NA LAVICI S NÍM!', d: 'Všichni kromě tebe naskočí na soupeře s míčem. Míč je váš a on je půl hodiny mimo hru.' },
+  ovoce:    { name: 'Ovocná bitva', ico: '🍎', hero: 'Přestávka', col: '#ef4444', line: 'Jabka, banány, meloun. Pal!', d: 'Na soupeře prší ovoce z celé třídy. Kdo dostane, leží.' },
+  vojta:    { name: 'Vojtův otřes', ico: '💫', hero: 'Vojta', col: '#a78bfa', line: 'Kde to jsem?', d: 'Obří rázová vlna: soupeři v okolí padají a točí se jim hvězdičky.' },
+  duha:     { name: 'Aleš Duha', ico: '🌈', hero: 'Aleš', col: '#ec4899', line: 'Dneska jsem fialovej. Ne, zelenej.', d: 'Tvůj tým mění barvy tak rychle, že soupeř 9 s přihrává vám.' },
+  gpt:      { name: 'Říša GPT', ico: '🤖', hero: 'Říša', col: '#38bdf8', line: 'Generuji dokonalou přihrávku…', d: '12 s dokonalé přihrávky a střely bez chyby.' },
+  ai:       { name: 'Účetní AI', ico: '🧮', hero: 'Paní účetní', col: '#22d3ee', line: 'Podle mých výpočtů… ERROR.', d: 'Soupeřům spadne systém: 3 s zamrzlí. Tvůj hráč hraje 7 s sám na autopilota.' },
+  audina:   { name: 'Piráti silnic', ico: '🚗', hero: 'Vedna', col: '#e5e7eb', line: 'Audina nebrzdí.', d: 'Vedna projede s Audinou přes celé hřiště a smete všechny soupeře v cestě.' },
+  jachym:   { name: 'Jácha vs. ředitelka', ico: '💥', hero: 'Jáchym', col: '#dc2626', line: 'Ředitelko, uhněte!', d: 'Další střela je tak strašná, že sejme i brankáře. Skoro jistý gól.' },
+  slavik:   { name: 'Slavík Boss', ico: '👑', hero: 'Slavík', col: '#ffd24d', line: 'Umím každej sport.', d: '10 s má tvůj hráč 99 ve všem, zlatou auru a je rychlejší.' },
+  junikorn: { name: 'Klárčin junikorn', ico: '🦄', hero: 'Klárka', col: '#f0abfc', line: 'Přilétá duhový jednorožec!', d: 'Jednorožec létá nad hřištěm a hází blesky do soupeřů.' },
+  // jen pro soupeře
+  laser:    { name: 'Laserové oči', ico: '🔴', hero: 'Robo tým', col: '#ef4444', line: 'CÍL ZAMĚŘEN.', d: 'Roboti pálí lasery přes hřiště.', opp: true },
+  hvezda:   { name: 'Hvězdné sólo', ico: '🌟', hero: 'Hvězda týmu', col: '#fde047', line: 'Dej mi ten míč.', d: 'Nejlepší hráč soupeře je 10 s nezastavitelný.', opp: true },
+  mlha:     { name: 'Fanouškovská mlha', ico: '🔥', hero: 'Kotel', col: '#94a3b8', line: 'Kotel pálí světlice!', d: 'Dým přes celé hřiště: tvoji hráči 7 s zpomalí a skoro nic nevidíš.', opp: true }
 };
-const ULTI_PRICE = 50000;
-const ultiOpen = k => (state.lvl || 1) >= ULTIS[k].lvl || (state.ultiOwn || []).includes(k);
+const SCHOOL_ULTIS = Object.keys(ULTIS).filter(k => !ULTIS[k].opp);
+function oppSignature(T, diff) {
+  if (!T) return 'laser';
+  return hash(T.name || '') % 2 ? 'hvezda' : 'mlha';
+}
 function ultiBanner(t, c) { hype(t, c || '#ffe14d'); }
-function ultiKit(p) { return G.duhaT > 0 && p.t === 0 ? (() => { const h = (performance.now() / 6 + p.num * 40) % 360, c = `hsl(${h},90%,55%)`; return { jersey: c, sleeve: c, socks: c }; })() : {}; }
-function oppsNear(x, y, r) { return G.players.filter(o => o.t === 1 && !o.red && o.role !== 'gk' && Math.hypot(o.x - x, o.y - y) < r); }
+function ultiKit(p) {
+  if (!(G.fxDuha && G.fxDuha.t === p.t)) return {};
+  const h = (performance.now() / 5 + p.num * 40) % 360, c = `hsl(${h},90%,55%)`; return { jersey: c, sleeve: c, socks: c };
+}
+const foes = t => G.players.filter(o => o.t !== t && !o.red && o.role !== 'gk');
 function knock(o, t) {
-  o.downT = Math.max(o.downT, t); o.fallT = Math.max(o.fallT || 0, t * .8); o.dizzyT = Math.max(o.dizzyT || 0, t); o.vx *= .2; o.vy *= .2;
+  o.downT = Math.max(o.downT, t); o.fallT = Math.max(o.fallT || 0, t * .85); o.dizzyT = Math.max(o.dizzyT || 0, t); o.vx *= .2; o.vy *= .2;
   const b = G.ball; if (b.owner === o) { b.owner = null; b.vx = (Math.random() - .5) * 6; b.vy = (Math.random() - .5) * 6; b.noPick = o; b.noPickT = 1; }
 }
-function fireUlti() {
-  const k = G.ulti, U = ULTIS[k], c = G.controlled, b = G.ball; if (!U || !c) return;
-  G.superM = 0; G.slowT = .45; G.flashA = .4; zoomPunch(c, .18); SFX.cheer(); G.qs.ultis = (G.qs.ultis || 0) + 1;
-  ultiBanner(`${U.ico} ${U.name.toUpperCase()}!`, '#ffe14d');
-  if (k === 'krychle') { c.cubeT = 6; c.ghostT = 6; }
+const realSecs = gameSec => gameSec / (HALF_LEN(G.half) / realOfHalf(G.half));
+
+/* ---------- výběr ze 3 ---------- */
+function openUltiPick() {
+  if (!G || !G.ultiOn || G.superM < 1 || G.cine || G.upick || G.state !== 'play') return;
+  const pool = SCHOOL_ULTIS.slice().sort(() => Math.random() - .5).slice(0, 3);
+  G.upick = { opts: pool, sel: 1, t: 0 }; SFX.reveal(true);
+}
+function ultiChoose(i) {
+  const P = G.upick; if (!P) return;
+  const k = P.opts[clamp(i, 0, P.opts.length - 1)]; G.upick = null; G.superM = 0;
+  startCine(k, 0);
+}
+function ultiKey(code) {
+  if (G.upick) {
+    const P = G.upick, m = /^(?:Digit|Numpad)([1-3])$/.exec(code);
+    if (m) ultiChoose(+m[1] - 1);
+    else if (code === 'ArrowLeft' || code === 'KeyA') P.sel = (P.sel + 2) % 3;
+    else if (code === 'ArrowRight' || code === 'KeyD') P.sel = (P.sel + 1) % 3;
+    else if ((code === 'Space' || code === 'Enter' || code === 'KeyE') && P.t > .3) ultiChoose(P.sel);
+    else if (code === 'Escape') { G.upick = null; }
+    return;
+  }
+  if (G.cine && (code === 'Space' || code === 'Enter' || code === 'KeyE') && G.cine.t < G.cine.intro && G.cine.t > .4) G.cine.t = G.cine.intro;
+}
+function pickRects() {
+  const cw = 270, ch = 330, gap = 26, x0 = W / 2 - (cw * 3 + gap * 2) / 2, y0 = H / 2 - ch / 2 + 20;
+  return [0, 1, 2].map(i => ({ x: x0 + i * (cw + gap), y: y0, w: cw, h: ch }));
+}
+cv.addEventListener('pointerdown', e => {
+  if (!G || !G.running) return;
+  const r = cv.getBoundingClientRect(), x = (e.clientX - r.left) * W / r.width, y = (e.clientY - r.top) * H / r.height;
+  if (G.upick) { pickRects().forEach((q, i) => { if (x >= q.x && x <= q.x + q.w && y >= q.y && y <= q.y + q.h) ultiChoose(i); }); return; }
+  if (G.cine && G.cine.t < G.cine.intro && G.cine.t > .4) G.cine.t = G.cine.intro;
+});
+function wrapText(txt, x, y, maxW, lh) {
+  const words = txt.split(' '); let line = '', yy = y;
+  for (const w of words) { const t = line ? line + ' ' + w : w; if (ctx.measureText(t).width > maxW && line) { ctx.fillText(line, x, yy); line = w; yy += lh; } else line = t; }
+  if (line) ctx.fillText(line, x, yy);
+}
+function drawUltiPick() {
+  const P = G.upick, t = P.t;
+  ctx.save(); ctx.fillStyle = 'rgba(3,5,18,.78)'; ctx.fillRect(0, 0, W, H);
+  ctx.textAlign = 'center'; ctx.fillStyle = '#ffd24d'; ctx.font = `900 46px ${COND}`; ctx.fillText('🔥 VYBER SI ULTI', W / 2, 112);
+  ctx.fillStyle = '#c9d2f5'; ctx.font = `700 18px ${COND}`; ctx.fillText(IS_TOUCH ? 'Ťukni na kartu' : '1 / 2 / 3  nebo  ← → a Mezerník', W / 2, 142);
+  pickRects().forEach((q, i) => {
+    const U = ULTIS[P.opts[i]], k = clamp((t - i * .08) / .3, 0, 1), sel = P.sel === i, bob = sel ? Math.sin(t * 6) * 4 : 0;
+    ctx.save(); ctx.globalAlpha = k; ctx.translate(q.x + q.w / 2, q.y + q.h / 2 + (1 - k) * 60 + bob); ctx.scale(sel ? 1.06 : 1, sel ? 1.06 : 1);
+    const g = ctx.createLinearGradient(0, -q.h / 2, 0, q.h / 2); g.addColorStop(0, U.col); g.addColorStop(.45, '#1b2858'); g.addColorStop(1, '#0a0f24');
+    ctx.fillStyle = g; rr(-q.w / 2, -q.h / 2, q.w, q.h, 18); ctx.fill();
+    ctx.lineWidth = sel ? 5 : 2; ctx.strokeStyle = sel ? '#ffe14d' : 'rgba(255,255,255,.3)'; rr(-q.w / 2, -q.h / 2, q.w, q.h, 18); ctx.stroke();
+    ctx.font = '84px system-ui'; ctx.fillText(U.ico, 0, -50);
+    ctx.fillStyle = '#fff'; ctx.font = `900 30px ${COND}`; ctx.fillText(U.name.toUpperCase(), 0, 20);
+    ctx.fillStyle = '#c9d2f5'; ctx.font = `600 16px ${COND}`; wrapText(U.d, 0, 52, q.w - 34, 20);
+    ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.font = `800 20px ${COND}`; ctx.fillText(String(i + 1), 0, q.h / 2 - 16);
+    ctx.restore();
+  });
+  ctx.restore();
+}
+
+/* ---------- cutscéna ---------- */
+function ultiActor(k, t) {
+  const b = G.ball, own = b.owner && b.owner.t === t ? b.owner : null;
+  if (k === 'hvezda') return G.players.filter(p => p.t === t && !p.red && p.role !== 'gk').sort((a, c) => (c.R || 0) - (a.R || 0))[0];
+  if (t === 0 && G.controlled && !G.controlled.red) return own || G.controlled;
+  return own || G.players.filter(p => p.t === t && !p.red && p.role !== 'gk').sort((a, c) => Math.hypot(a.x - b.x, a.y - b.y) - Math.hypot(c.x - b.x, c.y - b.y))[0];
+}
+function startCine(k, t) {
+  const actor = ultiActor(k, t); if (!actor) return;
+  G.cine = { k, t: 0, team: t, actor, intro: 2.3, act: k === 'naklad' ? 3.2 : k === 'audina' || k === 'junikorn' ? 3.4 : 2.4, done: false };
+  G.charge = -1; SFX.whistle(.1, 1); SFX.cheer(); G.flashA = .6; G.shake = 1;
+}
+function cineCam() {
+  const C = G.cine, a = C.actor, intro = C.t < C.intro, k = intro ? clamp(C.t / .6, 0, 1) : 1;
+  let fx = a.x, fy = a.y;
+  if (!intro) { if (G.car) { fx = G.car.x; fy = G.car.y; } else if (G.uni) { fx = G.uni.x; fy = G.uni.y; } else if (G.pileTgt) { fx = G.pileTgt.x; fy = G.pileTgt.y; } }
+  const z = intro ? 1 + .55 * k : 1.28;
+  return { x: G.camX + (fx - G.camX) * (intro ? k : .8), z, focus: { x: fx, y: fy } };
+}
+function drawCine() {
+  const C = G.cine, U = ULTIS[C.k], t = C.t, intro = t < C.intro, mine = C.team === 0;
+  const lb = Math.min(1, t / .35) * (intro ? 1 : Math.max(.55, 1 - (t - C.intro) / C.act * .45)) * H * .12;
+  ctx.save();
+  if (intro) {
+    const vg = ctx.createRadialGradient(W / 2, H / 2, H * .2, W / 2, H / 2, W * .7); vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.75)');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = .25; ctx.fillStyle = U.col; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1;
+    cineArt(C, U);
+    // karta hrdiny
+    const k = clamp((t - .15) / .45, 0, 1), e = 1 - Math.pow(1 - k, 3), px = -340 + e * (360), py = H / 2 + 20;
+    ctx.save(); ctx.translate(px, py);
+    ctx.fillStyle = 'rgba(8,12,32,.9)'; rr(0, -110, 520, 220, 20); ctx.fill(); ctx.fillStyle = U.col; rr(0, -110, 10, 220, 5); ctx.fill();
+    const img = hiImg(C.actor);
+    ctx.save(); ctx.beginPath(); ctx.arc(110, 0, 82, 0, TAU); ctx.clip(); ctx.fillStyle = '#334155'; ctx.fillRect(28, -82, 164, 164);
+    if (img.complete && img.naturalWidth) ctx.drawImage(img, 28, -82, 164, 164); ctx.restore();
+    ctx.strokeStyle = U.col; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(110, 0, 82, 0, TAU); ctx.stroke();
+    ctx.font = '54px system-ui'; ctx.textAlign = 'center'; ctx.fillText(U.ico, 178, 64);
+    ctx.textAlign = 'left'; ctx.fillStyle = mine ? '#86efac' : '#fca5a5'; ctx.font = `800 16px ${COND}`;
+    ctx.fillText(mine ? 'TVOJE ULTI' : `ULTI SOUPEŘE · ${G.teams[1].name.toUpperCase()}`, 212, -62);
+    ctx.fillStyle = '#fff'; ctx.font = `900 40px ${COND}`; ctx.fillText(U.name.toUpperCase(), 212, -20);
+    ctx.fillStyle = U.col; ctx.font = `800 20px ${COND}`; ctx.fillText(`${U.hero} · ${C.actor.name}`, 212, 10);
+    ctx.fillStyle = '#e2e8f0'; ctx.font = `italic 600 20px ${COND}`; wrapText(`„${U.line}“`, 212, 46, 290, 24);
+    ctx.restore();
+    // velký nápis
+    const k2 = clamp((t - .5) / .35, 0, 1), sc = .5 + .6 * (1 - Math.pow(1 - k2, 3)) + Math.sin(t * 9) * .015 * k2;
+    ctx.font = `900 92px ${COND}`; const tw = ctx.measureText(U.name.toUpperCase() + '!').width, fit = Math.min(1, (W - 600) / tw);
+    ctx.save(); ctx.globalAlpha = k2; ctx.translate(560 + (W - 560) / 2, H * .24); ctx.scale(sc * fit, sc * fit); ctx.rotate(-.05);
+    ctx.textAlign = 'center'; ctx.lineJoin = 'round'; ctx.lineWidth = 16; ctx.strokeStyle = '#0b0f24'; ctx.strokeText(U.name.toUpperCase() + '!', 0, 0);
+    const g = ctx.createLinearGradient(0, -70, 0, 10); g.addColorStop(0, '#fff'); g.addColorStop(1, U.col); ctx.fillStyle = g; ctx.fillText(U.name.toUpperCase() + '!', 0, 0);
+    ctx.restore();
+    if (t > .5) { ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.font = `700 15px ${COND}`; ctx.textAlign = 'right'; ctx.fillText(IS_TOUCH ? 'ťukni = přeskočit' : 'Mezerník = přeskočit', W - 24, H - lb - 12); }
+  } else {
+    const k = (t - C.intro) / C.act;
+    ctx.globalAlpha = Math.max(0, 1 - k * 1.5); ctx.fillStyle = '#fff'; ctx.font = `900 34px ${COND}`; ctx.textAlign = 'center';
+    ctx.fillText(`${U.ico} ${U.name.toUpperCase()}`, W / 2, lb + 44); ctx.globalAlpha = 1;
+  }
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, lb); ctx.fillRect(0, H - lb, W, lb);
+  ctx.restore();
+}
+/* pozadí cutscény podle ULTI (kreslí se přes zastavenou hru) */
+function cineArt(C, U) {
+  const t = C.t, k = C.k, R = (a, b) => a + (b - a) * ((Math.sin(t * 13.7 + a) + 1) / 2);
+  ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  if (k === 'prdomet') {
+    const r = Math.min(1, t / 1.6);
+    for (let i = 0; i < 26; i++) { const a = i * 2.39 + t * .6, d = r * W * (.15 + (i % 5) * .13); ctx.globalAlpha = .38; ctx.fillStyle = i % 2 ? '#84cc16' : '#bef264'; ctx.beginPath(); ctx.arc(W * .62 + Math.cos(a) * d, H * .55 + Math.sin(a) * d * .55, 60 + (i % 4) * 40 * r, 0, TAU); ctx.fill(); }
+    ctx.globalAlpha = 1; ctx.font = '160px system-ui'; ctx.fillText('💨', W * .72 + Math.sin(t * 20) * 6, H * .6);
+    ctx.font = '70px system-ui'; for (let i = 0; i < 5; i++) ctx.fillText('🤢', W * (.45 + i * .11), H * .82 + Math.sin(t * 5 + i) * 10);
+  } else if (k === 'audina') {
+    const x = -300 + (t / C.intro) * (W + 600);
+    for (let i = 0; i < 8; i++) { ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(x - 160 - i * 30, H * .58 + i * 12 - 50); ctx.lineTo(x - 420 - i * 60, H * .58 + i * 12 - 50); ctx.stroke(); }
+    ctx.save(); ctx.translate(x, H * .6); ctx.scale(-1, 1); ctx.font = '230px system-ui'; ctx.fillText('🚗', 0, 0); ctx.restore();
+    ctx.fillStyle = '#fff'; ctx.font = `900 54px ${COND}`; ctx.fillText('AUDINA', x, H * .6 - 150);
+  } else if (k === 'junikorn') {
+    const x = W * .3 + (t / C.intro) * W * .5, y = H * .32 + Math.sin(t * 4) * 20;
+    for (let i = 0; i < 7; i++) { ctx.fillStyle = `hsl(${i * 51},90%,60%)`; ctx.fillRect(0, y + 40 + i * 9, x - 60, 9); }
+    ctx.save(); ctx.translate(x, y); ctx.scale(-1, 1); ctx.font = '190px system-ui'; ctx.fillText('🦄', 0, 0); ctx.restore();
+    if (Math.sin(t * 9) > .3) { ctx.strokeStyle = '#fde047'; ctx.lineWidth = 7; ctx.shadowColor = '#fde047'; ctx.shadowBlur = 30; ctx.beginPath(); ctx.moveTo(x, y + 60); for (let i = 1; i <= 5; i++) ctx.lineTo(x + 40 + R(-50, 50), y + 60 + i * 70); ctx.stroke(); }
+  } else if (k === 'ovoce') {
+    const fr = ['🍎', '🍌', '🍊', '🍐', '🍉', '🥝', '🍑', '🍍'];
+    ctx.font = '74px system-ui'; for (let i = 0; i < 26; i++) { const yy = ((t * (300 + i * 23) + i * 97) % (H + 200)) - 100; ctx.fillText(fr[i % 8], (i * 167) % W, yy); }
+  } else if (k === 'vojta') {
+    for (let i = 0; i < 5; i++) { const r = ((t * 420 + i * 160) % 900); ctx.strokeStyle = `rgba(196,181,253,${1 - r / 900})`; ctx.lineWidth = 10; ctx.beginPath(); ctx.arc(W * .65, H * .55, r, 0, TAU); ctx.stroke(); }
+    ctx.font = '60px system-ui'; for (let i = 0; i < 8; i++) { const a = t * 3 + i * .785; ctx.fillText('⭐', W * .65 + Math.cos(a) * 170, H * .5 + Math.sin(a) * 60); }
+  } else if (k === 'duha') {
+    for (let i = 0; i < 12; i++) { ctx.globalAlpha = .45; ctx.fillStyle = `hsl(${(i * 30 + t * 400) % 360},90%,55%)`; ctx.fillRect(0, i * H / 12, W, H / 12 + 1); }
+  } else if (k === 'gpt') {
+    ctx.fillStyle = 'rgba(2,6,23,.6)'; ctx.fillRect(W * .45, H * .2, W * .5, H * .6);
+    ctx.textAlign = 'left'; ctx.fillStyle = '#38bdf8'; ctx.font = `600 22px ui-monospace,monospace`;
+    const lines = ['> prompt: "dej gól"', '> analyzuji 22 hráčů…', '> počítám trajektorie…', '> generuji dokonalou přihrávku', '> confidence: 100 %', '> ✔ hotovo'];
+    lines.forEach((l, i) => { const n = Math.floor((t - i * .3) * 30); if (n > 0) ctx.fillText(l.slice(0, n), W * .47, H * .28 + i * 36); });
+  } else if (k === 'ai') {
+    for (let i = 0; i < 18; i++) { ctx.fillStyle = i % 3 ? 'rgba(239,68,68,.5)' : 'rgba(34,211,238,.5)'; ctx.fillRect(R(0, W), R(0, H), R(80, 400), R(6, 30)); }
+    ctx.fillStyle = '#ef4444'; ctx.font = `900 120px ui-monospace,monospace`; ctx.fillText('ERROR 404', W * .62 + R(-8, 8), H * .55);
+    ctx.fillStyle = '#22d3ee'; ctx.font = `700 26px ui-monospace,monospace`; ctx.fillText('ucetnictvi.exe přestal reagovat', W * .62, H * .66);
+  } else if (k === 'jachym' || k === 'super') {
+    ctx.font = '150px system-ui'; ctx.fillText('⚽', W * .7 + Math.sin(t * 30) * 5, H * .58);
+    for (let i = 0; i < 30; i++) { ctx.globalAlpha = .7; ctx.fillStyle = i % 2 ? '#ff3d00' : '#ffb020'; ctx.beginPath(); ctx.arc(W * .7 - R(40, 400), H * .58 + R(-60, 60), R(8, 30), 0, TAU); ctx.fill(); }
+    if (k === 'jachym') { ctx.globalAlpha = 1; ctx.font = '90px system-ui'; ctx.fillText('😱', W * .9, H * .45); }
+  } else if (k === 'slavik' || k === 'hvezda') {
+    for (let i = 0; i < 16; i++) { const a = i * Math.PI / 8 + t * .5; ctx.globalAlpha = .25; ctx.fillStyle = '#ffd24d'; ctx.beginPath(); ctx.moveTo(W * .65, H * .5); ctx.arc(W * .65, H * .5, W, a, a + .12); ctx.fill(); }
+    ctx.globalAlpha = 1; ctx.font = '170px system-ui'; ctx.fillText(k === 'slavik' ? '👑' : '🌟', W * .65, H * .35 + Math.min(0, (t - .8) * 200) * -0 + Math.max(0, .8 - t) * -300);
+    if (k === 'slavik') { ctx.font = '64px system-ui'; ['⚽', '🏀', '🎾', '🏐', '🏒', '🏓'].forEach((e, i) => { const a = t * 2 + i * 1.05; ctx.fillText(e, W * .65 + Math.cos(a) * 230, H * .55 + Math.sin(a) * 90); }); }
+  } else if (k === 'krychle') {
+    ctx.save(); ctx.translate(W * .68, H * .5); ctx.rotate(t * 1.4); const s = 140 + Math.sin(t * 6) * 10;
+    ctx.fillStyle = '#facc15'; ctx.fillRect(-s, -s, s * 2, s * 2); ctx.strokeStyle = '#0b0f24'; ctx.lineWidth = 10; ctx.strokeRect(-s, -s, s * 2, s * 2);
+    const img = hiImg(C.actor); if (img.complete && img.naturalWidth) { ctx.globalAlpha = .9; ctx.drawImage(img, -s + 14, -s + 14, s * 2 - 28, s * 2 - 28); }
+    ctx.restore();
+  } else if (k === 'naklad') {
+    ctx.font = '170px system-ui'; ctx.fillText('🛋️', W * .7, H * .72);
+    const team = G.players.filter(p => p.t === C.team && p !== C.actor && !p.red).slice(0, 8);
+    team.forEach((p, i) => { const kk = clamp((t - .3 - i * .17) / .4, 0, 1), y = -100 + kk * (H * .55 - i * 18), img = hiImg(p);
+      ctx.save(); ctx.beginPath(); ctx.arc(W * .7 + (i % 3 - 1) * 70, y, 44, 0, TAU); ctx.clip(); if (img.complete && img.naturalWidth) ctx.drawImage(img, W * .7 + (i % 3 - 1) * 70 - 44, y - 44, 88, 88); ctx.restore(); });
+  } else if (k === 'laser') {
+    for (let i = 0; i < 4; i++) { ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 8 + i * 3; ctx.shadowColor = '#ef4444'; ctx.shadowBlur = 30; ctx.beginPath(); ctx.moveTo(W, H * (.3 + i * .12)); ctx.lineTo(W * (1 - Math.min(1, t)) , H * (.4 + i * .1)); ctx.stroke(); }
+    ctx.shadowBlur = 0; ctx.font = '150px system-ui'; ctx.fillText('🤖', W * .85, H * .5);
+  } else if (k === 'mlha') {
+    for (let i = 0; i < 30; i++) { ctx.globalAlpha = .35; ctx.fillStyle = i % 3 ? '#cbd5e1' : '#f87171'; ctx.beginPath(); ctx.arc((i * 131 + t * 90) % W, H * .3 + (i * 53) % (H * .6), 80 + (i % 4) * 30, 0, TAU); ctx.fill(); }
+    ctx.globalAlpha = 1; ctx.font = '110px system-ui'; ctx.fillText('🔥📣🔥', W * .66, H * .78);
+  }
+  ctx.restore();
+}
+
+/* ---------- samotné efekty ---------- */
+function applyUlti(C) {
+  const k = C.k, t = C.team, c = C.actor, b = G.ball, e = 1 - t;
+  if (t === 0) G.qs.ultis = (G.qs.ultis || 0) + 1;
+  G.shake = Math.max(G.shake, 1.6);
+  if (k === 'super') { G.armed[t] = true; }
+  else if (k === 'prdomet') {
+    G.fart = { x: c.x, y: c.y, t: 0, team: t };
+    for (const o of foes(t)) { knock(o, 3 + Math.random()); o.fleeT = 6; popup(o, '🤢', '#86efac'); }
+    const gk = gkOf(e); if (gk) { gk.downT = 2.2; gk.fallT = 2; }
+  }
+  else if (k === 'krychle') { c.cubeT = 8; c.ghostT = 8; }
   else if (k === 'naklad') {
-    const tg = b.owner && b.owner.t === 1 ? b.owner : G.players.filter(o => o.t === 1 && !o.red).sort((a, o2) => Math.hypot(a.x - b.x, a.y - b.y) - Math.hypot(o2.x - b.x, o2.y - b.y))[0];
-    G.pileTgt = tg; G.pileT = 2.6;
-    for (const p of G.players) if (p.t === 0 && !p.red && p.role !== 'gk' && tg && Math.hypot(p.x - tg.x, p.y - tg.y) < 30) p.pileT = 2.6;
+    const tg = b.owner && b.owner.t === e && b.owner.role !== 'gk' ? b.owner : foes(t).sort((a, o2) => Math.hypot(a.x - b.x, a.y - b.y) - Math.hypot(o2.x - b.x, o2.y - b.y))[0];
+    G.pileTgt = tg; G.pileT = 3.2; G.pileDone = false; G.pileTeam = t;
+    for (const p of G.players) if (p.t === t && !p.red && p.role !== 'gk' && !(t === 0 && p === G.controlled)) p.pileT = 3.2;
+    if (tg) { tg.freezeT = 3.2; }
   }
-  else if (k === 'prdomet') { G.fart = { x: c.x, y: c.y, t: 0 }; for (const o of oppsNear(c.x, c.y, 9)) { knock(o, 1.6); o.fleeT = 3; } G.shake = 1.6; }
-  else if (k === 'junikorn') { G.uni = { t: 0, x: c.x - dirOf(0) * 30, cd: .3, n: 0 }; }
-  else if (k === 'ovoce') { G.fruitT = 4.5; G.fruitCd = 0; }
-  else if (k === 'vojta') { G.shock = { x: c.x, y: c.y, t: 0 }; for (const o of oppsNear(c.x, c.y, 10)) knock(o, 2.6); G.shake = 2.5; }
-  else if (k === 'duha') G.duhaT = 7;
-  else if (k === 'gpt') G.gptT = 10;
-  else if (k === 'ai') { G.aiT = 6; c.perfectT = 6; for (const o of G.players) if (o.t === 1 && !o.red) { o.freezeT = 1.8; if (Math.random() < .5) popup(o, 'ERROR 404', '#f87171'); } }
-  else if (k === 'audina') {
-    const dir = dirOf(0), lane = clamp(b.y, 3, PW - 3);
-    G.car = { x: G.camX - dir * 42, y: lane, dir, t: 0, hit: new Set() }; SFX.whistle(.12, 2);
+  else if (k === 'ovoce') { G.fruitT = 5; G.fruitCd = 0; G.fruitTeam = t; }
+  else if (k === 'vojta') { G.shock = { x: c.x, y: c.y, t: 0 }; for (const o of G.players) if (o.t === e && !o.red && Math.hypot(o.x - c.x, o.y - c.y) < 18) knock(o, 3.2); }
+  else if (k === 'duha') G.fxDuha = { t, T: 9 };
+  else if (k === 'gpt') { G.fxGpt = { t, T: 12 }; for (const p of G.players) if (p.t === t) p.perfectT = 12; }
+  else if (k === 'ai') {
+    for (const o of G.players) if (o.t === e && !o.red) { o.freezeT = 3; if (Math.random() < .6) popup(o, 'ERROR 404', '#f87171'); }
+    if (t === 0) { G.autoPilotT = 7; c.perfectT = 7; }
   }
-  else if (k === 'jachym') { G.jachymT = 9; c.perfectT = 9; }
-  else if (k === 'slavik') { c.bossT = 8; c.stBak = Object.assign({}, c.st); for (const q of ['spd', 'sht', 'pas', 'dri', 'def', 'phy']) c.st[q] = Math.max(c.st[q], 1.1); }
+  else if (k === 'audina') { const dir = dirOf(t); G.car = { x: (dir > 0 ? 0 : PL) - dir * 8, y: clamp(b.y, 4, PW - 4), dir, t: 0, team: t, hit: new Set(), pass: 0 }; }
+  else if (k === 'jachym') { G.fxJach = { t }; c.perfectT = 12; }
+  else if (k === 'slavik' || k === 'hvezda') { c.bossT = 10; c.stBak = Object.assign({}, c.st); for (const q of ['spd', 'sht', 'pas', 'dri', 'def', 'phy']) c.st[q] = Math.max(c.st[q], 1.12); }
+  else if (k === 'junikorn') G.uni = { t: 0, x: c.x - dirOf(t) * 25, y: c.y, cd: .2, n: 0, team: t };
+  else if (k === 'laser') { G.laser = { t: 0, team: t, x: c.x }; }
+  else if (k === 'mlha') { G.fog = { t: 0, team: t, T: 7 }; for (const o of G.players) if (o.t === e) o.fogT = 7; }
 }
 function ultiUpd(dt) {
   const b = G.ball;
+  // soupeřův ukazatel
+  if (G.ultiOn && G.teams[1].ai && !G.cine && !G.upick) {
+    G.aiMeter = Math.min(1, (G.aiMeter || 0) + dt / ({ rookie: 110, easy: 85, normal: 65, hard: 50 }[G.diff] || 70));
+    if (G.aiMeter >= 1 && G.state === 'play' && Math.random() < dt * .4) {
+      G.aiMeter = 0;
+      const pool = SCHOOL_ULTIS.filter(k => k !== 'super');
+      startCine(Math.random() < .5 ? G.oppSig : pool[ri(0, pool.length - 1)], 1);
+      return;
+    }
+  }
   for (const p of G.players) {
-    for (const q of ['cubeT', 'perfectT', 'freezeT']) if (p[q] > 0) p[q] = Math.max(0, p[q] - dt);
+    for (const q of ['cubeT', 'perfectT', 'freezeT', 'fleeT', 'fogT']) if (p[q] > 0) p[q] = Math.max(0, p[q] - dt);
     if (p.bossT > 0) { p.bossT -= dt; if (p.bossT <= 0 && p.stBak) { p.st = p.stBak; p.stBak = null; } }
-    if (p.pileT > 0 && G.pileTgt && Math.hypot(p.x - G.pileTgt.x, p.y - G.pileTgt.y) < 1.4 && !G.pileDone) {
-      G.pileDone = true; const tg = G.pileTgt; knock(tg, 3); popup(tg, '🛋️ NALOŽENO!', '#ffe14d'); G.shake = 1.8;
-      if (b.owner === tg || Math.hypot(b.x - tg.x, b.y - tg.y) < 3) { b.owner = null; take(p); G.controlled = p; }
+    if (p.outT > 0) { p.outT -= dt; if (p.outT <= 0) { p.red = false; p.leaveT = undefined; p.x = clamp(p.x, 3, PL - 3); p.y = 1; p.downT = 0; p.fallT = 0; banner('NÁVRAT Z LAVICE', `${p.name} se oklepal a hraje dál`, '#f97316', 2.2); } }
+    if (p.pileT > 0 && G.pileTgt && !G.pileDone && Math.hypot(p.x - G.pileTgt.x, p.y - G.pileTgt.y) < 1.5) {
+      G.pileDone = true; const tg = G.pileTgt; knock(tg, 3); G.shake = 2.2;
+      banner('🛋️ NALOŽENO NA LAVICI!', `${tg.name} je půl hodiny mimo hru`, '#f97316', 2.6);
+      if (b.owner === tg || Math.hypot(b.x - tg.x, b.y - tg.y) < 4) { b.owner = null; b.x = p.x; b.y = p.y; take(p); if (p.t === 0 && !G.teams[0].ai) G.controlled = p; }
+      tg.red = true; tg.leaveT = 0; tg.outT = Math.max(20, realSecs(1800));
+      if (G.controlled === tg) G.controlled = null;
     }
   }
-  if (G.pileT > 0) { G.pileT -= dt; if (G.pileT <= 0) { G.pileTgt = null; G.pileDone = false; for (const p of G.players) p.pileT = 0; } }
-  if (G.aiT > 0) G.aiT -= dt;
-  if (G.duhaT > 0) G.duhaT -= dt;
-  if (G.gptT > 0) G.gptT -= dt;
-  if (G.jachymT > 0) G.jachymT -= dt;
-  if (G.fart) { G.fart.t += dt; for (const o of oppsNear(G.fart.x, G.fart.y, 7)) if (G.fart.t < 4 && !(o.downT > 0) && Math.random() < dt * 1.2) { knock(o, .8); popup(o, '🤢', '#86efac'); } if (G.fart.t > 4.5) G.fart = null; }
-  for (const o of G.players) if (o.fleeT > 0) o.fleeT -= dt;
-  if (G.uni) {
-    const U = G.uni, b2 = G.ball; U.t += dt; U.x += (b2.x - U.x) * Math.min(1, dt * 1.8); U.y = b2.y - 6 + Math.sin(U.t * 3) * 2; U.cd -= dt;
-    if (U.cd <= 0 && U.n < 7 && U.t > .6) {
-      const tg = G.players.filter(o => o.t === 1 && !o.red && o.role !== 'gk' && !(o.downT > 0)).sort((a, o2) => Math.hypot(a.x - U.x, a.y - U.y) - Math.hypot(o2.x - U.x, o2.y - U.y))[0];
-      if (tg) { U.bolt = { x: tg.x, y: tg.y, t: 0 }; knock(tg, 2); popup(tg, '⚡ ZÁSAH!', '#fde047'); G.flashA = .25; U.n++; }
-      U.cd = .55;
-    }
-    if (U.bolt) { U.bolt.t += dt; if (U.bolt.t > .25) U.bolt = null; }
-    if (U.t > 5) G.uni = null;
-  }
-  if (G.shock) { G.shock.t += dt; if (G.shock.t > .8) G.shock = null; }
+  if (G.pileT > 0) { G.pileT -= dt; if (G.pileT <= 0) { G.pileTgt = null; for (const p of G.players) p.pileT = 0; } }
+  if (G.autoPilotT > 0) G.autoPilotT -= dt;
+  for (const f of ['fxDuha', 'fxGpt']) if (G[f]) { G[f].T -= dt; if (G[f].T <= 0) G[f] = null; }
+  if (G.shock) { G.shock.t += dt; if (G.shock.t > 1.2) G.shock = null; }
+  if (G.fart) { G.fart.t += dt; if (G.fart.t > 7) G.fart = null; }
+  if (G.fog) { G.fog.t += dt; G.fogMe = G.fog.team === 1 ? Math.min(2.5, G.fog.t * 3, (G.fog.T - G.fog.t) * 2) : 0; if (G.fog.t > G.fog.T) { G.fog = null; G.fogMe = 0; } }
   if (G.fruitT > 0) {
     G.fruitT -= dt; G.fruitCd -= dt;
     if (G.fruitCd <= 0) {
-      G.fruitCd = .22;
-      const tg = G.players.filter(o => o.t === 1 && !o.red && o.role !== 'gk').sort(() => Math.random() - .5)[0];
-      if (tg) (G.fruits = G.fruits || []).push({ x0: tg.x + (Math.random() - .5) * 20, y0: -4, tg, t: 0, dur: .7, e: ['🍎', '🍌', '🍊', '🍐', '🍉', '🥝'][ri(0, 5)] });
+      G.fruitCd = .14;
+      const list = foes(G.fruitTeam), tg = list[ri(0, Math.max(0, list.length - 1))];
+      if (tg) (G.fruits = G.fruits || []).push({ x0: tg.x + (Math.random() - .5) * 24, y0: G.fruitTeam === 0 ? -4 : PW + 4, tg, t: 0, dur: .65, e: ['🍎', '🍌', '🍊', '🍐', '🍉', '🥝', '🍍'][ri(0, 6)] });
     }
   }
-  if (G.fruits) {
-    for (const f of G.fruits) { f.t += dt; if (f.t >= f.dur && !f.done) { f.done = true; knock(f.tg, 1.4); popup(f.tg, 'ŇAM!', '#86efac'); } }
-    G.fruits = G.fruits.filter(f => f.t < f.dur + .3);
-  }
+  if (G.fruits) { for (const f of G.fruits) { f.t += dt; if (f.t >= f.dur && !f.done) { f.done = true; knock(f.tg, 1.8); popup(f.tg, 'ŇAM!', '#86efac'); } } G.fruits = G.fruits.filter(f => f.t < f.dur + .3); }
   if (G.car) {
-    const C = G.car; C.t += dt; C.x += C.dir * 38 * dt;
-    for (const o of G.players) if (o.t === 1 && !o.red && !C.hit.has(o) && Math.abs(o.x - C.x) < 2.8 && Math.abs(o.y - C.y) < 3.2) { C.hit.add(o); knock(o, 2.2); o.vy = (o.y < C.y ? -1 : 1) * 9; popup(o, 'BEEP BEEP!', '#fca5a5'); G.shake = 1.4; }
-    if (Math.abs(C.x - G.camX) > 48 && C.t > .5) G.car = null;
+    const C = G.car; C.t += dt; C.x += C.dir * 42 * dt;
+    for (const o of G.players) if (o.t !== C.team && !o.red && !C.hit.has(o) && Math.abs(o.x - C.x) < 3 && Math.abs(o.y - C.y) < 4.5) { C.hit.add(o); knock(o, 2.6); o.vy = (o.y < C.y ? -1 : 1) * 10; popup(o, 'BEEP BEEP!', '#fca5a5'); G.shake = 1.5; }
+    if ((C.dir > 0 && C.x > PL + 10) || (C.dir < 0 && C.x < -10)) {
+      C.pass++; if (C.pass < 2) { C.dir *= -1; C.y = clamp(C.y + (C.y < CY ? 14 : -14), 4, PW - 4); } else G.car = null;
+    }
+  }
+  if (G.uni) {
+    const U = G.uni; U.t += dt; U.x += (b.x - U.x) * Math.min(1, dt * 1.5); U.y += (b.y - 4 - U.y) * Math.min(1, dt * 1.5); U.cd -= dt;
+    if (U.cd <= 0 && U.n < 10) {
+      const tg = foes(U.team).filter(o => !(o.downT > 0)).sort((a, o2) => Math.hypot(a.x - U.x, a.y - U.y) - Math.hypot(o2.x - U.x, o2.y - U.y))[0];
+      if (tg) { U.bolt = { x: tg.x, y: tg.y, t: 0 }; knock(tg, 2.4); popup(tg, '⚡ ZÁSAH!', '#fde047'); G.flashA = .3; U.n++; }
+      U.cd = .38;
+    }
+    if (U.bolt) { U.bolt.t += dt; if (U.bolt.t > .25) U.bolt = null; }
+    if (U.t > 6) G.uni = null;
+  }
+  if (G.laser) {
+    const L = G.laser; L.t += dt; const sweepX = L.x + dirOf(L.team) * L.t * 40;
+    for (const o of G.players) if (o.t !== L.team && !o.red && !(o.downT > 0) && Math.abs(o.x - sweepX) < 2.5) { knock(o, 2); popup(o, '🔴 ZASAŽEN', '#f87171'); }
+    L.sx = sweepX; if (L.t > 2.4) G.laser = null;
   }
 }
 function drawUltiWorld() {
   const t = performance.now() / 1000;
-  if (G.shock) { const k = G.shock.t / .8; ctx.save(); ctx.globalAlpha = 1 - k; ctx.strokeStyle = '#c4b5fd'; ctx.lineWidth = 6; ctx.beginPath(); const pts = circ(G.shock.x, G.shock.y, 1 + k * 10, 0, TAU, 40); pts.forEach((q, i) => { const [x, y] = proj(q[0], q[1]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); ctx.stroke(); ctx.restore(); }
-  if (G.fart) { const F = G.fart, k = Math.min(1, F.t / .6), a = F.t > 3.5 ? Math.max(0, 1 - (F.t - 3.5)) : 1;
-    ctx.save(); ctx.globalAlpha = .45 * a;
-    for (let i = 0; i < 14; i++) { const ang = i * 2.4 + F.t * .5, r = (2 + (i % 4) * 1.6) * k, [x, y] = proj(F.x + Math.cos(ang) * r, F.y + Math.sin(ang) * r * .8, .6 + (i % 3) * .5), s = pxPerM(F.x, F.y); ctx.fillStyle = i % 2 ? '#84cc16' : '#a3e635'; ctx.beginPath(); ctx.arc(x, y, s * (1.2 + (i % 3) * .5), 0, TAU); ctx.fill(); }
-    ctx.restore(); }
-  if (G.uni) { const U = G.uni, [ux, uy] = proj(U.x, U.y, 7 + Math.sin(U.t * 4)), s = pxPerM(U.x, U.y);
-    ctx.save(); ctx.translate(ux, uy); ctx.scale(-dirOf(0), 1); ctx.font = `${Math.round(s * 3.4)}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('🦄', 0, 0); ctx.restore();
-    ctx.save(); ctx.globalAlpha = .6; for (let i = 0; i < 6; i++) { ctx.fillStyle = `hsl(${i * 60},90%,60%)`; ctx.fillRect(ux - dirOf(0) * (s * 1.6 + i * 6), uy + s * .2 + i * 3, -dirOf(0) * s * 3, 3); } ctx.restore();
-    if (U.bolt) { const [bx, by] = proj(U.bolt.x, U.bolt.y); ctx.save(); ctx.strokeStyle = '#fde047'; ctx.lineWidth = 5; ctx.shadowColor = '#fde047'; ctx.shadowBlur = 18; ctx.beginPath(); ctx.moveTo(ux, uy); let x = ux, y = uy; for (let i = 1; i <= 6; i++) { x = ux + (bx - ux) * i / 6 + (i < 6 ? (Math.random() - .5) * 26 : 0); y = uy + (by - uy) * i / 6; ctx.lineTo(x, y); } ctx.stroke(); ctx.restore(); }
+  if (G.fart) {
+    const F = G.fart, a = F.t > 5.5 ? Math.max(0, 1 - (F.t - 5.5) / 1.5) : Math.min(1, F.t * 2);
+    ctx.save(); ctx.globalAlpha = .2 * a;
+    for (let i = 0; i < 40; i++) { const X = (i * 37.3 + F.t * 3) % (PL + 20) - 10, Y = (i * 19.7) % (PW + 6) - 3, [x, y] = proj(X, Y, 1), s = pxPerM(X, Y); ctx.fillStyle = i % 2 ? '#84cc16' : '#bef264'; ctx.beginPath(); ctx.arc(x, y, s * (3 + (i % 3) * 1.5), 0, TAU); ctx.fill(); }
+    ctx.restore();
   }
+  if (G.fog) { ctx.save(); ctx.globalAlpha = .22; for (let i = 0; i < 30; i++) { const X = (i * 41 + t * 4) % (PL + 20) - 10, Y = (i * 23) % PW, [x, y] = proj(X, Y, 1.5), s = pxPerM(X, Y); ctx.fillStyle = i % 4 ? '#cbd5e1' : '#fca5a5'; ctx.beginPath(); ctx.arc(x, y, s * 4, 0, TAU); ctx.fill(); } ctx.restore(); }
+  if (G.shock) { const k = G.shock.t / 1.2; ctx.save(); ctx.globalAlpha = 1 - k; ctx.strokeStyle = '#c4b5fd'; ctx.lineWidth = 8; ctx.beginPath(); circ(G.shock.x, G.shock.y, 1 + k * 18, 0, TAU, 48).forEach((q, i) => { const [x, y] = proj(q[0], q[1]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); ctx.stroke(); ctx.restore(); }
   if (G.fruits) for (const f of G.fruits) {
     const k = Math.min(1, f.t / f.dur), x = f.x0 + (f.tg.x - f.x0) * k, y = f.y0 + (f.tg.y - f.y0) * k, z = Math.sin(k * Math.PI) * 9 + 1.6 * (1 - k);
-    const [sx, sy] = proj(x, y, z), s = pxPerM(x, y); ctx.font = `${Math.round(s * 1.1)}px system-ui`; ctx.textAlign = 'center'; ctx.fillText(f.e, sx, sy);
+    const [sx, sy] = proj(x, y, z), s = pxPerM(x, y); ctx.font = `${Math.round(s * 1.3)}px system-ui`; ctx.textAlign = 'center'; ctx.fillText(f.e, sx, sy);
   }
   if (G.car) {
     const C = G.car, [sx, sy] = proj(C.x, C.y), s = pxPerM(C.x, C.y);
-    ctx.save(); ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.ellipse(sx, sy, s * 2.6, s * .55, 0, 0, TAU); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 3; for (let i = 0; i < 4; i++) { const yy = sy - s * (.4 + i * .45); ctx.beginPath(); ctx.moveTo(sx - C.dir * s * (2.8 + i * .3), yy); ctx.lineTo(sx - C.dir * s * (5 + i), yy); ctx.stroke(); }
-    ctx.translate(sx, sy - s * 1.2); ctx.scale(-C.dir, 1); ctx.font = `${Math.round(s * 4)}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('🚗', 0, 0); ctx.restore();
-    ctx.font = `900 ${Math.round(s * .7)}px ${COND}`; ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 4; ctx.strokeText('AUDINA', sx, sy - s * 3.6); ctx.fillText('AUDINA', sx, sy - s * 3.6);
+    ctx.save(); ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.ellipse(sx, sy, s * 2.8, s * .6, 0, 0, TAU); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 3; for (let i = 0; i < 4; i++) { const yy = sy - s * (.4 + i * .45); ctx.beginPath(); ctx.moveTo(sx - C.dir * s * (3 + i * .3), yy); ctx.lineTo(sx - C.dir * s * (6 + i), yy); ctx.stroke(); }
+    ctx.translate(sx, sy - s * 1.3); ctx.scale(-C.dir, 1); ctx.font = `${Math.round(s * 4.4)}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('🚗', 0, 0); ctx.restore();
+    ctx.font = `900 ${Math.round(s * .75)}px ${COND}`; ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 4; ctx.strokeText('AUDINA', sx, sy - s * 3.9); ctx.fillText('AUDINA', sx, sy - s * 3.9);
   }
+  if (G.uni) {
+    const U = G.uni, [ux, uy] = proj(U.x, U.y, 7 + Math.sin(U.t * 4)), s = pxPerM(U.x, U.y), d = dirOf(U.team);
+    ctx.save(); ctx.globalAlpha = .65; for (let i = 0; i < 6; i++) { ctx.fillStyle = `hsl(${i * 60},90%,60%)`; ctx.fillRect(ux - d * s * 1.5, uy + s * .2 + i * 4, -d * s * 5, 4); } ctx.restore();
+    ctx.save(); ctx.translate(ux, uy); ctx.scale(-d, 1); ctx.font = `${Math.round(s * 3.6)}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('🦄', 0, 0); ctx.restore();
+    if (U.bolt) { const [bx, by] = proj(U.bolt.x, U.bolt.y); ctx.save(); ctx.strokeStyle = '#fde047'; ctx.lineWidth = 6; ctx.shadowColor = '#fde047'; ctx.shadowBlur = 20; ctx.beginPath(); ctx.moveTo(ux, uy); for (let i = 1; i <= 6; i++) ctx.lineTo(ux + (bx - ux) * i / 6 + (i < 6 ? (Math.random() - .5) * 30 : 0), uy + (by - uy) * i / 6); ctx.stroke(); ctx.restore(); }
+  }
+  if (G.laser && G.laser.sx != null) { const X = G.laser.sx; ctx.save(); ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 7; ctx.shadowColor = '#ef4444'; ctx.shadowBlur = 25; poly([[X, -2, 1.2], [X, PW + 2, 1.2]]); ctx.restore(); }
   for (const p of G.players) {
-    if (!(p.bossT > 0 || p.cubeT > 0 || (G.aiT > 0 && p === G.controlled))) continue;
+    if (!(p.bossT > 0 || p.cubeT > 0 || (G.autoPilotT > 0 && p === G.controlled))) continue;
     const [sx, sy] = proj(p.x, p.y), s = pxPerM(p.x, p.y);
     ctx.save(); ctx.globalAlpha = .55 + .25 * Math.sin(t * 10);
     ctx.strokeStyle = p.bossT > 0 ? '#ffd24d' : p.cubeT > 0 ? '#facc15' : '#38bdf8'; ctx.lineWidth = 4;
     ctx.beginPath(); ctx.ellipse(sx, sy, s * 1.3, s * .42, 0, 0, TAU); ctx.stroke(); ctx.restore();
     if (p.bossT > 0) { ctx.font = `${Math.round(s * .8)}px system-ui`; ctx.textAlign = 'center'; ctx.fillText('👑', sx, sy - s * 2.75); }
-    if (G.aiT > 0 && p === G.controlled) { ctx.font = `800 ${Math.round(s * .45)}px ${COND}`; ctx.textAlign = 'center'; ctx.fillStyle = '#38bdf8'; ctx.fillText('AUTOPILOT', sx, sy + s * .9); }
+    if (G.autoPilotT > 0 && p === G.controlled) { ctx.font = `800 ${Math.round(s * .45)}px ${COND}`; ctx.textAlign = 'center'; ctx.fillStyle = '#38bdf8'; ctx.fillText('AUTOPILOT', sx, sy + s * .9); }
   }
-  if (G.gptT > 0) {
+  if (G.fxGpt) {
     const b = G.ball; if (b.owner || Math.hypot(b.vx, b.vy) < 1) return;
     ctx.save(); ctx.setLineDash([6, 6]); ctx.strokeStyle = 'rgba(56,189,248,.9)'; ctx.lineWidth = 3; ctx.beginPath();
     let x = b.x, y = b.y, vx = b.vx, vy = b.vy; const [x0, y0] = proj(x, y); ctx.moveTo(x0, y0);
@@ -6857,26 +7087,21 @@ function drawUltiWorld() {
     ctx.stroke(); ctx.restore();
   }
 }
-/* -- výběr ULTI v sestavě -- */
+/* ukazatel soupeřovy ULTI (vpravo nahoře) */
+function drawOppUltiBar() {
+  if (!G.ultiOn || G.state !== 'play' && G.state !== 'dead') return;
+  const v = G.aiMeter || 0, w = 170, x = W - w - 24, y = 92, U = ULTIS[G.oppSig];
+  ctx.save(); ctx.fillStyle = 'rgba(5,8,22,.7)'; rr(x - 8, y - 22, w + 16, 34, 8); ctx.fill();
+  ctx.font = `800 13px ${COND}`; ctx.textAlign = 'left'; ctx.fillStyle = v > .85 ? '#fca5a5' : '#c9d2f5'; ctx.fillText(`${U.ico} ULTI SOUPEŘE`, x, y - 7);
+  ctx.fillStyle = '#ffffff1a'; ctx.fillRect(x, y, w, 6); ctx.fillStyle = v > .85 ? '#ef4444' : '#f87171'; ctx.fillRect(x, y, w * v, 6);
+  ctx.restore();
+}
+/* sestava: přehled ULTI */
 function ultiPickerHTML() {
-  const sel = state.ulti || 'super';
-  return `<div class="ulti-box"><div class="ub-h">⚡ ULTI <small>– spustíš ji klávesou ${esc(kOf('ulti'))}, když je SUPER plný (Super střela jde dál Mezerníkem)</small></div><div class="ulti-grid">${Object.entries(ULTIS).map(([k, U]) => {
-    const open = ultiOpen(k);
-    return `<button class="ulti ${sel === k ? 'sel' : ''} ${open ? '' : 'lock'}" data-ulti="${k}" type="button" title="${esc(U.d)}"><span class="ui-ico">${U.ico}</span><b>${esc(U.name)}</b><small>${open ? esc(U.d) : `🔒 Úroveň ${U.lvl} nebo ${ULTI_PRICE.toLocaleString('cs-CZ')} 🪙`}</small></button>`;
-  }).join('')}</div></div>`;
+  return `<div class="ulti-box"><div class="ub-h">🔥 ULTI <small>– když je ukazatel plný, zmáčkni ${esc(kOf('ulti'))} a vyber si ze 3 náhodných</small></div><div class="ulti-grid">${SCHOOL_ULTIS.map(k => { const U = ULTIS[k];
+    return `<div class="ulti"><span class="ui-ico">${U.ico}</span><b>${esc(U.name)}</b><small>${esc(U.d)}</small></div>`; }).join('')}</div></div>`;
 }
-function bindUltiPicker(root) {
-  $$('#squad [data-ulti]').forEach(b => b.onclick = () => {
-    const k = b.dataset.ulti;
-    if (!ultiOpen(k)) {
-      if (state.coins < ULTI_PRICE) { toast(`Odemkne se na úrovni ${ULTIS[k].lvl}, nebo za ${ULTI_PRICE.toLocaleString('cs-CZ')} 🪙.`); return; }
-      if (!confirm(`Odemknout ULTI „${ULTIS[k].name}“ za ${ULTI_PRICE.toLocaleString('cs-CZ')} mincí?`)) return;
-      state.coins -= ULTI_PRICE; (state.ultiOwn = state.ultiOwn || []).push(k); refreshCoins(); SFX.coin();
-    }
-    state.ulti = k; save(); toast(`${ULTIS[k].ico} ULTI: ${ULTIS[k].name}`);
-    renderSquad();
-  });
-}
+function bindUltiPicker() {}
 go('menu'); if (!state.nick) openProfile(true);
 })();
 </script>
